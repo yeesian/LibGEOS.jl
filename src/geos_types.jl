@@ -390,6 +390,160 @@ mutable struct GeometryCollection <: AbstractMultiGeometry
     )
 end
 
+mutable struct CircularString <: AbstractGeometry
+    ptr::GEOSGeom
+    context::GEOSContext
+    function CircularString(
+        obj::CircularString,
+        context::GEOSContext = get_global_context(),
+    )
+        circularstring = new(cloneGeom(obj, context), context)
+        finalizer(destroyGeom, circularstring)
+        circularstring
+    end
+    # create a circularstring from a circularstring pointer, otherwise error
+    function CircularString(obj::GEOSGeom, context::GEOSContext = get_global_context())
+        id = LibGEOS.geomTypeId(obj, context)
+        circularstring = if id == GEOS_CIRCULARSTRING
+            new(obj, context)
+        else
+            open_issue_if_conversion_makes_sense(CircularString, id)
+        end
+        finalizer(destroyGeom, circularstring)
+        circularstring
+    end
+    # create a circularstring from a vector of points
+    function CircularString(
+        coords::Vector{Vector{Float64}},
+        context::GEOSContext = get_global_context(),
+    )
+        circularstring = new(createCircularString(coords, context), context)
+        finalizer(destroyGeom, circularstring)
+        circularstring
+    end
+    function CircularString(coords::Vector{Point}, context::GEOSContext = get_global_context())
+        circularstring = new(createCircularString(coords, context), context)
+        finalizer(destroyGeom, circularstring)
+        circularstring
+    end
+end
+
+mutable struct CompoundCurve <: AbstractGeometry
+    ptr::GEOSGeom
+    context::GEOSContext
+    function CompoundCurve(obj::CompoundCurve, context::GEOSContext = get_global_context())
+        compoundcurve = new(cloneGeom(obj, context), context)
+        finalizer(destroyGeom, compoundcurve)
+        compoundcurve
+    end
+    # create a compoundcurve from a compoundcurve pointer, otherwise error
+    function CompoundCurve(obj::GEOSGeom, context::GEOSContext = get_global_context())
+        id = LibGEOS.geomTypeId(obj, context)
+        compoundcurve = if id == GEOS_COMPOUNDCURVE
+            new(obj, context)
+        else
+            open_issue_if_conversion_makes_sense(CompoundCurve, id)
+        end
+        finalizer(destroyGeom, compoundcurve)
+        compoundcurve
+    end
+end
+
+mutable struct CurvePolygon <: AbstractGeometry
+    ptr::GEOSGeom
+    context::GEOSContext
+    function CurvePolygon(obj::CurvePolygon, context::GEOSContext = get_global_context())
+        curvepolygon = new(cloneGeom(obj, context), context)
+        finalizer(destroyGeom, curvepolygon)
+        curvepolygon
+    end
+    function CurvePolygon(obj::Union{LinearRing,CircularString,CompoundCurve}, context::GEOSContext = get_global_context())
+        curvepolygon = new(createCurvePolygon(cloneGeom(obj, context), context), context)
+        finalizer(destroyGeom, curvepolygon)
+        curvepolygon
+    end
+    function CurvePolygon(obj::GEOSGeom, context::GEOSContext = get_global_context())
+        id = LibGEOS.geomTypeId(obj, context)
+        curvepolygon = if id == GEOS_CURVEPOLYGON
+            new(obj, context)
+        elseif id in [GEOS_LINEARRING,GEOS_CIRCULARSTRING,GEOS_COMPOUNDCURVE]
+            new(createCurvePolygon(obj, context), context)
+        else
+            open_issue_if_conversion_makes_sense(CurvePolygon, id)
+        end
+        finalizer(destroyGeom, curvepolygon)
+        curvepolygon
+    end
+    # using vector of coordinates in following form:
+    # [[exterior], [hole1], [hole2], ...] where exterior and holeN are coordinates where the first and last point are the same
+    function CurvePolygon(
+        coords::Vector{Vector{Vector{Float64}}},
+        context::GEOSContext = get_global_context(),
+    )
+        exterior = createLinearRing(coords[1], context)
+        interiors = GEOSGeom[createLinearRing(lr, context) for lr in coords[2:end]]
+        curvepolygon = new(createCurvePolygon(exterior, interiors, context), context)
+        finalizer(destroyGeom, curvepolygon)
+        curvepolygon
+    end
+    # using multiple rings to form polygon with holes - exterior ring will be polygon boundary and list of interior rings will form holes
+    CurvePolygon(
+        exterior::Union{LinearRing,CircularString,CompoundCurve},
+        holes::Vector{Union{LinearRing,CircularString,CompoundCurve}},
+        context::GEOSContext = get_context(exterior),
+    ) = CurvePolygon(
+        createCurvePolygon(
+            cloneGeom(exterior, context),
+            cloneGeom.(holes, Ref(context)),
+            context,
+        ),
+        context,
+    )
+  
+end
+
+mutable struct MultiCurve <: AbstractGeometry
+    ptr::GEOSGeom
+    context::GEOSContext
+    function MultiCurve(obj::MultiCurve, context::GEOSContext = get_global_context())
+        multicurve = new(cloneGeom(obj, context), context)
+        finalizer(destroyGeom, multicurve)
+        multicurve
+    end
+    # create a compoundcurve from a compoundcurve pointer, otherwise error
+    function MultiCurve(obj::GEOSGeom, context::GEOSContext = get_global_context())
+        id = LibGEOS.geomTypeId(obj, context)
+        multicurve = if id == GEOS_MULTICURVE
+            new(obj, context)
+        else
+            open_issue_if_conversion_makes_sense(MultiCurve, id)
+        end
+        finalizer(destroyGeom, multicurve)
+        multicurve
+    end
+end
+
+mutable struct MultiSurface <: AbstractGeometry
+    ptr::GEOSGeom
+    context::GEOSContext
+    function MultiSurface(obj::MultiSurface, context::GEOSContext = get_global_context())
+        multisurface = new(cloneGeom(obj, context), context)
+        finalizer(destroyGeom, multisurface)
+        multisurface
+    end
+    # create a multisurface from a multisurface, otherwise error
+    function MultiSurface(obj::GEOSGeom, context::GEOSContext = get_global_context())
+        id = LibGEOS.geomTypeId(obj, context)
+        multisurface = if id == GEOS_MULTISURFACE
+            new(obj, context)
+        else
+            open_issue_if_conversion_makes_sense(MultiSurface, id)
+        end
+        finalizer(destroyGeom, multisurface)
+        multisurface
+    end
+end
+
 const Geometry = Union{
     Point,
     MultiPoint,
@@ -399,6 +553,11 @@ const Geometry = Union{
     Polygon,
     MultiPolygon,
     GeometryCollection,
+    CircularString,
+    CompoundCurve,
+    CurvePolygon,
+    MultiCurve,
+    MultiSurface,
 }
 
 """
@@ -439,6 +598,11 @@ const geomtypes = [
     MultiLineString,
     MultiPolygon,
     GeometryCollection,
+    CircularString,
+    CompoundCurve,
+    CurvePolygon,
+    MultiCurve,
+    MultiSurface,
 ]
 
 const HasCoordSeq = Union{LineString,LinearRing,Point}
@@ -573,6 +737,11 @@ typesalt(::Type{MultiPoint}) = 0x6213e67dbfd3b570
 typesalt(::Type{MultiPolygon}) = 0xff2f957b4cdb5832
 typesalt(::Type{Point}) = 0x4b5c101d3843160e
 typesalt(::Type{Polygon}) = 0xa5c895d62ef56723
+typesalt(::Type{CircularString}) = 0x78ba4f50813d8da9
+typesalt(::Type{CompoundCurve}) = 0x44258e194220dc61
+typesalt(::Type{CurvePolygon}) = 0xdd0a2660d0239f1d
+typesalt(::Type{MultiCurve}) = 0x0641e0678af4d103
+typesalt(::Type{MultiSurface}) = 0x9f6a2cba51468ea5
 
 function Base.hash(geo::AbstractGeometry, h::UInt)::UInt
     h = hash(typesalt(typeof(geo)), h)
@@ -617,6 +786,11 @@ const GEOMTYPE = Dict{GEOSGeomTypes,Symbol}(
     GEOS_MULTILINESTRING => :MultiLineString,
     GEOS_MULTIPOLYGON => :MultiPolygon,
     GEOS_GEOMETRYCOLLECTION => :GeometryCollection,
+    GEOS_CIRCULARSTRING => :CircularString,
+    GEOS_COMPOUNDCURVE => :CompoundCurve,
+    GEOS_CURVEPOLYGON => :CurvePolygon,
+    GEOS_MULTICURVE => :MultiCurve,
+    GEOS_MULTISURFACE => :MultiSurface,
 )
 
 function geomFromGEOS(
@@ -640,6 +814,16 @@ function geomFromGEOS(
         return MultiPolygon(ptr, context)
     elseif id == GEOS_GEOMETRYCOLLECTION
         return GeometryCollection(ptr, context)
+    elseif id == GEOS_CIRCULARSTRING
+        return CircularString(ptr, context)
+    elseif id == GEOS_COMPOUNDCURVE
+        return CompoundCurve(ptr, context)
+    elseif id == GEOS_CURVEPOLYGON
+        return CurvePolygon(ptr, context)
+    elseif id == GEOS_MULTICURVE
+        return MultiCurve(ptr, context)
+    elseif id == GEOS_MULTISURFACE
+        return MultiSurface(ptr, context)
     else
         throw(ErrorException("Geometric type with code $id not implemented."))
     end

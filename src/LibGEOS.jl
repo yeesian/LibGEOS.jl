@@ -8,12 +8,17 @@ using CEnum
 
 const GI = GeoInterface
 
-export GeometryCollection,
+export CircularString,
+    CompoundCurve,
+    CurvePolygon,
+    GeometryCollection,
     LineString,
     LinearRing,
+    MultiCurve,
     MultiLineString,
     MultiPoint,
     MultiPolygon,
+    MultiSurface,
     Point,
     Polygon,
     STRtree

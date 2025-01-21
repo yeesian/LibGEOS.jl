@@ -8,6 +8,11 @@ geointerface_geomtype(::LinearRingTrait) = LinearRing
 geointerface_geomtype(::PolygonTrait) = Polygon
 geointerface_geomtype(::MultiPolygonTrait) = MultiPolygon
 geointerface_geomtype(::GeometryCollectionTrait) = GeometryCollection
+geointerface_geomtype(::CircularStringTrait) = CircularString
+geointerface_geomtype(::CompoundCurveTrait) = CompoundCurve
+geointerface_geomtype(::CurvePolygonTrait) = CurvePolygon
+geointerface_geomtype(::MultiSurfaceTrait) = MultiSurface
+geointerface_geomtype(::MultiCurveTrait) = MultiCurve
 
 GeoInterface.geomtrait(::Point) = PointTrait()
 GeoInterface.geomtrait(::MultiPoint) = MultiPointTrait()
@@ -17,6 +22,11 @@ GeoInterface.geomtrait(::LinearRing) = LinearRingTrait()
 GeoInterface.geomtrait(::Polygon) = PolygonTrait()
 GeoInterface.geomtrait(::MultiPolygon) = MultiPolygonTrait()
 GeoInterface.geomtrait(::GeometryCollection) = GeometryCollectionTrait()
+GeoInterface.geomtrait(::CircularString) = CircularStringTrait()
+GeoInterface.geomtrait(::CompoundCurve) = CompoundCurveTrait()
+GeoInterface.geomtrait(::CurvePolygon) = CurvePolygonTrait()
+GeoInterface.geomtrait(::MultiSurface) = MultiSurfaceTrait()
+GeoInterface.geomtrait(::MultiCurve) = MultiCurveTrait()
 GeoInterface.geomtrait(geom::PreparedGeometry) = GeoInterface.geomtrait(geom.ownedby)
 
 GeoInterface.isempty(::AbstractGeometryTrait, geom::AbstractGeometry) = isEmpty(geom)
@@ -24,16 +34,21 @@ GeoInterface.isempty(::AbstractGeometryTrait, geom::AbstractGeometry) = isEmpty(
 GeoInterface.ngeom(::AbstractGeometryCollectionTrait, geom::AbstractMultiGeometry) =
     isEmpty(geom) ? 0 : Int(numGeometries(geom))
 GeoInterface.ngeom(::LineStringTrait, geom::LineString) = Int(numPoints(geom))
+GeoInterface.ngeom(::CircularStringTrait, geom::CircularString) = Int(numPoints(geom))
 GeoInterface.ngeom(::LinearRingTrait, geom::LinearRing) = Int(numPoints(geom))
 GeoInterface.ngeom(::PolygonTrait, geom::Polygon) = Int(numInteriorRings(geom)) + 1
+GeoInterface.ngeom(::CurvePolygonTrait, geom::CurvePolygon) =
+    Int(numInteriorRings(geom)) + 1
 GeoInterface.ngeom(t::AbstractGeometryTrait, geom::PreparedGeometry) =
     GeoInterface.ngeom(t, geom.ownedby)
 GeoInterface.ngeom(::AbstractPointTrait, geom::Point) = 0
 GeoInterface.ngeom(::AbstractPointTrait, geom::PreparedGeometry) = 0
 
 GI.is3d(::AbstractGeometryTrait, geom::AbstractGeometry) = hasZ(geom)
-GI.getexterior(::AbstractPolygonTrait, geom::Polygon) = exteriorRing(geom)
-GI.gethole(::AbstractPolygonTrait, geom::Polygon, n) = interiorRing(geom, n)
+GI.getexterior(::AbstractPolygonTrait, geom::Union{Polygon,CurvePolygon}) =
+    exteriorRing(geom)
+GI.gethole(::AbstractPolygonTrait, geom::Union{Polygon,CurvePolygon}, n) =
+    interiorRing(geom, n)
 
 function GeoInterface.getgeom(
     ::AbstractGeometryCollectionTrait,
@@ -54,6 +69,13 @@ GeoInterface.getgeom(
 ) = getPoint(geom, i)
 GeoInterface.getgeom(t::AbstractPointTrait, geom::PreparedGeometry) = nothing
 function GeoInterface.getgeom(::PolygonTrait, geom::Polygon, i::Int)
+    if i == 1
+        exteriorRing(geom)
+    else
+        interiorRing(geom, i - 1)
+    end
+end
+function GeoInterface.getgeom(::CurvePolygonTrait, geom::CurvePolygon, i::Int)
     if i == 1
         exteriorRing(geom)
     else

@@ -555,6 +555,38 @@ function createCollection(
     result
 end
 
+function createCircularString(ptr::GEOSCoordSeq, context::GEOSContext = get_global_context())
+    result = GEOSGeom_createCircularString_r(context, ptr)
+    if result == C_NULL
+        error("LibGEOS: Error in GEOSGeom_createCircularString")
+    end
+    result
+end
+createCircularString(
+    coords::Vector{Vector{Float64}},
+    context::GEOSContext = get_global_context(),
+) = GEOSGeom_createCircularString_r(context, createCoordSeq(coords, context))
+
+# Second argument is an array of GEOSGeometry* objects.
+# The caller remains owner of the array, but pointed-to
+# objects become ownership of the returned GEOSGeometry.
+function createCurvePolygon(
+    shell::Union{LinearRing,CircularString,CompoundCurve,GEOSGeom},
+    holes::AbstractVector,
+    context::GEOSContext = get_global_context(),
+)
+    result = GEOSGeom_createCurvePolygon_r(context, shell, holes, length(holes))
+    if result == C_NULL
+        error("LibGEOS: Error in GEOSGeom_createCurvePolygon")
+    end
+    result
+end
+# convenience function to create polygon without holes
+createCurvePolygon(
+    shell::Union{LinearRing,CircularString,CompoundCurve,GEOSGeom},
+    context::GEOSContext = get_global_context(),
+) = createCurvePolygon(shell, GEOSGeom[], context)
+
 function createEmptyCollection(
     geomtype::GEOSGeomTypes,
     context::GEOSContext = get_global_context(),
@@ -1336,7 +1368,10 @@ function normalize!(obj::Geometry, context::GEOSContext = get_context(obj))
 end
 
 # Return -1 on exception
-function numInteriorRings(obj::Polygon, context::GEOSContext = get_context(obj))
+function numInteriorRings(
+    obj::Union{Polygon,CurvePolygon},
+    context::GEOSContext = get_context(obj),
+)
     result = GEOSGetNumInteriorRings_r(context, obj)
     if result == -1
         error("LibGEOS: Error in GEOSGetNumInteriorRings")
@@ -1346,7 +1381,7 @@ end
 
 # Call only on LINESTRING (returns -1 on exception)
 function numPoints(
-    obj::Union{LineString,LinearRing},
+    obj::Union{LineString,LinearRing,CircularString},
     context::GEOSContext = get_context(obj),
 )
     result = GEOSGeomGetNumPoints_r(context, obj)
@@ -1408,15 +1443,58 @@ function interiorRings(obj::Polygon, context::GEOSContext = get_context(obj))
     end
 end
 
+# Polygon rings are of type LinearRing, and can be inferred, but CurvePolygon rings can be Union{LinearRing,CircularString,CompoundCurve}
+function interiorRing(
+    obj::CurvePolygon,
+    n::Integer,
+    context::GEOSContext = get_context(obj),
+)
+    if !(0 < n <= numInteriorRings(obj, context))
+        error(
+            "LibGEOS: n=$n is out of bounds for CurvePolygon with $(numInteriorRings(obj, context)) interior ring(s)",
+        )
+    end
+    result = GEOSGetInteriorRingN_r(context, obj, n - 1)
+    if result == C_NULL
+        error("LibGEOS: Error in GEOSGetInteriorRingN")
+    end
+    geomFromGEOS(cloneGeom(result, context), context)
+end
+
+function interiorRings(obj::CurvePolygon, context::GEOSContext = get_context(obj))
+    n = numInteriorRings(obj, context)
+    if n == 0
+        return LinearRing[]
+    else
+        return [interiorRing(obj, i, context) for i = 1:n]
+    end
+end
+
+
 # Return NULL on exception, Geometry must be a Polygon.
 # Returned object is a pointer to internal storage: it must NOT be destroyed directly.
-function exteriorRing(obj::Polygon, context::GEOSContext = get_context(obj))
+function exteriorRing(
+    obj::Polygon,
+    context::GEOSContext = get_context(obj),
+)::LinearRing
     result = GEOSGetExteriorRing_r(context, obj)
     if result == C_NULL
         error("LibGEOS: Error in GEOSGetExteriorRing")
     end
     LinearRing(cloneGeom(result, context), context)
 end
+
+function exteriorRing(
+    obj::CurvePolygon,
+    context::GEOSContext = get_context(obj),
+)::Union{LinearRing,CircularString,CompoundCurve}
+    result = GEOSGetExteriorRing_r(context, obj)
+    if result == C_NULL
+        error("LibGEOS: Error in GEOSGetExteriorRing")
+    end
+    geomFromGEOS(cloneGeom(result, context), context)
+end
+
 
 # Return -1 on exception
 function numCoordinates(obj::Geometry, context::GEOSContext = get_context(obj))

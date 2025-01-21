@@ -442,3 +442,40 @@ end
         @test LibGEOS.equals(g1, g2)
     end
 end
+
+@testset "Curved geometry types" begin
+    wkt = [
+        "CIRCULARSTRING(0 0,1 1,2 0)"
+        "CIRCULARSTRING (0 0, 1 1, 2 0, 3 -1, 4 0, 2 2, 0 0)"
+        "CURVEPOLYGON ((0 0, 2 0, 0 2, 0 0))"
+        "CURVEPOLYGON (CIRCULARSTRING (0 0, 1 1, 2 0, 3 -1, 4 0, 2 2, 0 0))"
+        "COMPOUNDCURVE (CIRCULARSTRING (0 0, 1 1, 2 0), (2 0, 2 -1, 0 -1, 0 0))"
+        "CURVEPOLYGON (COMPOUNDCURVE (CIRCULARSTRING (0 0, 1 1, 2 0), (2 0, 2 -1, 0 -1, 0 0)))"
+        "MULTISURFACE (CURVEPOLYGON (CIRCULARSTRING (0 0, 1 1, 2 0, 3 -1, 4 0, 2 2, 0 0)))"
+        "MULTICURVE((1 0, 2 0))"
+        "CURVEPOLYGON (COMPOUNDCURVE (CIRCULARSTRING (0 0, 2 2, 4 0), (4 0, 4 -1, 0 -1, 0 0)), LINEARRING (1 0, 3 0, 3 1, 1 1, 1 0))"
+    ]
+
+    geom = readgeom.(wkt)
+    @test all(geomLength.(geom) .≈ [pi, 4pi, 4 + 2 * sqrt(2), 4pi, pi + 4, pi + 4, 4pi, 1, 2pi + 12])
+    @test all(area.(geom) .≈ [0, 0, 2, 2pi, 0, pi / 2 + 2, 2pi, 0, 2pi + 2])
+
+    cp = geom[5]
+    @test_broken ngeom(cp) # not defined, not supported in GEOS 3.13.0
+
+    cp = geom[6]
+    @test_broken isequal(cp, CurvePolygon(cp)) # needs ngeom for compoundcurve
+
+    cp = geom[9]
+    @test length(interiorRings(cp)) == 1
+    @test typeof(exteriorRing(cp)) == CompoundCurve
+    @test typeof(interiorRings(cp)[1]) == LinearRing
+
+    geom = [
+        CircularString([[0.,0], [1,1], [2,0]])
+        CircularString([[0.,0], [1,1], [2,0], [3,-1], [4,0], [2,2], [0,0]])
+        CurvePolygon([[[0.,0], [2,0], [0,2], [0,0]]])
+        CurvePolygon(CircularString([[0.,0], [1,1], [2,0], [3,-1], [4,0], [2,2], [0,0]]))
+        ]
+    @test ngeom.(geom) == [3, 7, 1, 1]
+end
